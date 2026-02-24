@@ -1,0 +1,2006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RepairBot — Fix Code Instantly</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Manrope:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   GLOBAL TOKENS
+============================================================ */
+:root {
+  --bg: #0b0b10;
+  --surface: #13131c;
+  --surface2: #1c1c28;
+  --surface3: #252535;
+  --border: #2c2c3e;
+  --border2: #3a3a52;
+  --text: #eeeef8;
+  --muted: #6e6e88;
+  --ollama: #22c55e;
+  --ollama-dim: rgba(34,197,94,0.1);
+  --ollama-border: rgba(34,197,94,0.22);
+  --claude: #fb923c;
+  --claude-dim: rgba(251,146,60,0.1);
+  --claude-border: rgba(251,146,60,0.22);
+  --moltbot: #818cf8;
+  --moltbot-dim: rgba(129,140,248,0.1);
+  --moltbot-border: rgba(129,140,248,0.22);
+  --error: #f87171;
+  --warn: #fbbf24;
+  --success: #4ade80;
+  --rn: #61dafb;
+  --swift: #fa7343;
+  --kotlin: #a97bff;
+  --flutter: #54c5f8;
+  --android: #a4c639;
+  --shadow: 0 2px 12px rgba(0,0,0,0.5);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.6);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+html, body {
+  height: 100%;
+  font-family: 'Manrope', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* ============================================================
+   PAGE SYSTEM
+============================================================ */
+.page {
+  position: fixed;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 10;
+}
+
+.page.active {
+  display: flex;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Ambient bg glow */
+.page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 700px 400px at 15% 5%, rgba(34,197,94,0.04) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 400px at 85% 85%, rgba(129,140,248,0.04) 0%, transparent 70%),
+    radial-gradient(ellipse 400px 300px at 60% 40%, rgba(251,146,60,0.03) 0%, transparent 70%);
+  z-index: 0;
+}
+
+/* ============================================================
+   SHARED HEADER
+============================================================ */
+.app-header {
+  position: relative;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  height: 56px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 900;
+  font-size: 1.05rem;
+  color: var(--text);
+  letter-spacing: -0.3px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.logo-mark {
+  width: 30px; height: 30px;
+  background: linear-gradient(135deg, var(--ollama), var(--moltbot));
+  border-radius: 8px;
+  display: grid; place-items: center;
+  font-size: 15px;
+}
+
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+
+.hnav-btn {
+  padding: 6px 13px;
+  border-radius: 7px;
+  border: none;
+  background: none;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hnav-btn:hover { background: var(--surface2); color: var(--text); }
+.hnav-btn.active { background: var(--surface2); color: var(--text); }
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.free-pill {
+  padding: 4px 11px;
+  background: var(--ollama-dim);
+  border: 1px solid var(--ollama-border);
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--ollama);
+}
+
+.upgrade-pill {
+  padding: 4px 12px;
+  background: var(--claude-dim);
+  border: 1px solid var(--claude-border);
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--claude);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.upgrade-pill:hover { background: var(--claude); color: #000; }
+
+.avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: 2px solid var(--border2);
+  display: grid; place-items: center;
+  font-size: 14px;
+  cursor: pointer;
+  position: relative;
+}
+
+.avatar-menu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 6px;
+  min-width: 160px;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  display: none;
+}
+
+.avatar-menu.open { display: block; }
+
+.amenu-item {
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s;
+}
+
+.amenu-item:hover { background: var(--surface3); }
+.amenu-item.danger { color: var(--error); }
+
+/* ============================================================
+   PAGE 1 — LANDING
+============================================================ */
+#page-landing {
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.landing-hero {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 80px 40px 60px;
+  min-height: calc(100vh - 56px);
+}
+
+.landing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  background: var(--ollama-dim);
+  border: 1px solid var(--ollama-border);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--ollama);
+  margin-bottom: 28px;
+  animation: fadeUp 0.5s ease;
+}
+
+.landing-badge .bdot { width: 6px; height: 6px; border-radius: 50%; background: var(--ollama); animation: pulse 2s infinite; }
+
+.landing-h1 {
+  font-size: clamp(2.4rem, 5vw, 4rem);
+  font-weight: 900;
+  letter-spacing: -2px;
+  line-height: 1.1;
+  margin-bottom: 20px;
+  animation: fadeUp 0.5s ease 0.05s both;
+}
+
+.landing-h1 .grad {
+  background: linear-gradient(135deg, var(--ollama), var(--moltbot));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.landing-sub {
+  font-size: 1.05rem;
+  color: var(--muted);
+  max-width: 520px;
+  line-height: 1.7;
+  margin-bottom: 36px;
+  animation: fadeUp 0.5s ease 0.1s both;
+}
+
+.landing-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 56px;
+  flex-wrap: wrap;
+  justify-content: center;
+  animation: fadeUp 0.5s ease 0.15s both;
+}
+
+.btn-cta {
+  padding: 14px 30px;
+  background: var(--ollama);
+  color: #000;
+  border: none;
+  border-radius: 12px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-cta:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(34,197,94,0.3); }
+
+.btn-ghost {
+  padding: 14px 26px;
+  background: none;
+  color: var(--text);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-ghost:hover { border-color: var(--muted); background: var(--surface2); }
+
+/* Platform icons strip */
+.platform-strip {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 64px;
+  animation: fadeUp 0.5s ease 0.2s both;
+}
+
+.p-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  transition: all 0.2s;
+  cursor: default;
+}
+
+.p-chip:hover { border-color: var(--border2); color: var(--text); }
+
+/* How it works */
+.how-it-works {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  max-width: 900px;
+  width: 100%;
+  animation: fadeUp 0.5s ease 0.25s both;
+}
+
+.hiw-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.hiw-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+}
+
+.hiw-card:nth-child(1)::before { background: var(--ollama); }
+.hiw-card:nth-child(2)::before { background: var(--claude); }
+.hiw-card:nth-child(3)::before { background: var(--moltbot); }
+
+.hiw-num { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 10px; }
+.hiw-icon { font-size: 28px; margin-bottom: 10px; display: block; }
+.hiw-title { font-weight: 800; font-size: 1rem; margin-bottom: 7px; }
+.hiw-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
+
+/* ============================================================
+   PAGE 2 — AUTH
+============================================================ */
+#page-auth {
+  display: flex !important;
+  align-items: stretch;
+}
+
+#page-auth.active { display: flex; }
+
+.auth-left {
+  width: 420px;
+  flex-shrink: 0;
+  background: linear-gradient(160deg, #0e1a12 0%, #0b0b10 60%);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 36px;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-left::before {
+  content: '';
+  position: absolute;
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(34,197,94,0.12) 0%, transparent 70%);
+  top: -60px; right: -60px;
+  pointer-events: none;
+}
+
+.auth-logo { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 1.1rem; margin-bottom: 0; }
+.auth-logo .logo-mark { width: 34px; height: 34px; font-size: 16px; }
+
+.auth-hero-text { z-index: 1; }
+.auth-headline { font-size: 2rem; font-weight: 900; letter-spacing: -1px; line-height: 1.2; margin-bottom: 14px; }
+.auth-headline .g { color: var(--ollama); }
+
+.auth-features { display: flex; flex-direction: column; gap: 12px; }
+.af-item { display: flex; align-items: flex-start; gap: 10px; }
+.af-icon { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.af-icon.g { background: rgba(34,197,94,0.15); }
+.af-icon.o { background: rgba(251,146,60,0.15); }
+.af-icon.p { background: rgba(129,140,248,0.15); }
+.af-text strong { display: block; font-size: 0.82rem; font-weight: 700; margin-bottom: 1px; }
+.af-text span { font-size: 0.72rem; color: var(--muted); }
+
+.auth-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  overflow-y: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-card { width: 100%; max-width: 380px; }
+
+.auth-tabs { display: flex; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 4px; gap: 4px; margin-bottom: 22px; }
+.auth-tab { flex: 1; padding: 8px; border: none; border-radius: 7px; font-family: 'Manrope', sans-serif; font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--muted); }
+.auth-tab.active { background: var(--surface3); color: var(--text); box-shadow: var(--shadow); }
+
+.auth-title { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 4px; }
+.auth-sub { font-size: 0.8rem; color: var(--muted); margin-bottom: 22px; }
+
+.social-btns { display: flex; flex-direction: column; gap: 9px; margin-bottom: 18px; }
+
+.s-btn {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  transition: all 0.18s;
+  color: var(--text);
+}
+
+.s-btn:hover { border-color: var(--border2); background: var(--surface3); transform: translateY(-1px); }
+.s-btn .s-ico { font-size: 18px; }
+.s-btn .s-lbl { flex: 1; text-align: left; }
+.s-btn .s-rec { font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: var(--ollama-dim); color: var(--ollama); border: 1px solid var(--ollama-border); }
+
+.divider { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.divider-line { flex: 1; height: 1px; background: var(--border); }
+.divider-text { font-size: 0.7rem; color: var(--muted); font-weight: 500; white-space: nowrap; }
+
+.form-group { margin-bottom: 13px; }
+.form-label { display: block; font-size: 0.72rem; font-weight: 700; margin-bottom: 5px; color: var(--text); }
+.form-input { width: 100%; padding: 11px 13px; background: var(--surface2); border: 1px solid var(--border); border-radius: 9px; font-family: 'Manrope', sans-serif; font-size: 0.82rem; color: var(--text); outline: none; transition: all 0.18s; }
+.form-input:focus { border-color: var(--ollama); box-shadow: 0 0 0 2px var(--ollama-dim); }
+.form-input::placeholder { color: var(--muted); }
+.form-input.err { border-color: var(--error); }
+
+.form-err { font-size: 0.68rem; color: var(--error); margin-top: 4px; display: none; }
+.form-err.show { display: block; }
+
+.pass-wrap { position: relative; }
+.pass-wrap .form-input { padding-right: 42px; }
+.toggle-pass { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 15px; color: var(--muted); }
+
+.btn-submit { width: 100%; padding: 13px; background: var(--ollama); color: #000; border: none; border-radius: 10px; font-family: 'Manrope', sans-serif; font-size: 0.85rem; font-weight: 800; cursor: pointer; transition: all 0.2s; margin-top: 4px; }
+.btn-submit:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.switch-msg { text-align: center; margin-top: 16px; font-size: 0.75rem; color: var(--muted); }
+.switch-msg button { background: none; border: none; color: var(--text); font-weight: 700; cursor: pointer; font-family: 'Manrope', sans-serif; font-size: 0.75rem; }
+.switch-msg button:hover { text-decoration: underline; }
+
+/* ============================================================
+   SHARED APP SHELL (dashboard pages)
+============================================================ */
+.app-shell {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+/* Sidebar nav */
+.side-nav {
+  width: 52px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.snav-btn {
+  width: 38px; height: 38px;
+  border-radius: 9px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s;
+  color: var(--muted);
+  position: relative;
+}
+
+.snav-btn:hover { background: var(--surface2); color: var(--text); }
+.snav-btn.active { background: var(--surface2); color: var(--text); }
+.snav-btn.active::before { content: ''; position: absolute; left: -1px; top: 50%; transform: translateY(-50%); width: 3px; height: 20px; background: var(--ollama); border-radius: 0 2px 2px 0; }
+.snav-spacer { flex: 1; }
+
+/* ============================================================
+   PAGE 3 — DASHBOARD (home)
+============================================================ */
+#page-dashboard .main-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+#page-dashboard .main-area::-webkit-scrollbar { width: 4px; }
+#page-dashboard .main-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.dash-welcome { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.dash-welcome h2 { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px; }
+.dash-welcome p { font-size: 0.8rem; color: var(--muted); }
+
+.repo-input-hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.repo-input-hero h3 { font-size: 0.82rem; font-weight: 700; color: var(--muted); margin-bottom: -4px; text-transform: uppercase; letter-spacing: 1px; font-size: 0.68rem; }
+
+.repo-row { display: flex; gap: 10px; }
+
+.repo-url-input {
+  flex: 1;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text);
+  outline: none;
+  transition: all 0.18s;
+}
+
+.repo-url-input:focus { border-color: var(--ollama); box-shadow: 0 0 0 2px var(--ollama-dim); }
+.repo-url-input::placeholder { color: var(--muted); }
+
+.btn-scan {
+  padding: 12px 22px;
+  background: var(--ollama);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-scan:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+.engine-choice { display: flex; gap: 10px; }
+
+.ec-opt {
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  transition: all 0.18s;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--surface2);
+}
+
+.ec-opt:hover { border-color: var(--border2); }
+.ec-opt.selected-ollama { border-color: var(--ollama-border); background: var(--ollama-dim); }
+.ec-opt.selected-claude { border-color: var(--claude-border); background: var(--claude-dim); }
+
+.ec-opt-name { font-weight: 700; font-size: 0.82rem; }
+.ec-opt-desc { font-size: 0.68rem; color: var(--muted); }
+.ec-opt-tag { margin-left: auto; font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+.ec-free { background: var(--ollama-dim); color: var(--ollama); }
+.ec-pro { background: var(--claude-dim); color: var(--claude); }
+
+/* Stats row */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: border-color 0.2s;
+}
+
+.stat-card:hover { border-color: var(--border2); }
+
+.stat-icon { font-size: 22px; width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; }
+
+.si-green { background: rgba(74,222,128,0.1); }
+.si-red { background: rgba(248,113,113,0.1); }
+.si-orange { background: rgba(251,146,60,0.1); }
+.si-purple { background: rgba(129,140,248,0.1); }
+
+.stat-info { flex: 1; }
+.stat-num { font-size: 1.6rem; font-weight: 900; line-height: 1; font-family: 'DM Mono', monospace; }
+.stat-lbl { font-size: 0.65rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+
+/* Recent repos */
+.section-header { display: flex; align-items: center; justify-content: space-between; }
+.section-title { font-weight: 800; font-size: 0.95rem; }
+.section-link { font-size: 0.75rem; color: var(--muted); cursor: pointer; font-weight: 600; }
+.section-link:hover { color: var(--text); }
+
+.repos-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+
+.repo-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.repo-card:hover { border-color: var(--border2); transform: translateY(-2px); box-shadow: var(--shadow); }
+
+.rc-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.rc-icon { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; font-size: 17px; flex-shrink: 0; }
+.rc-name { font-weight: 700; font-size: 0.85rem; margin-bottom: 2px; }
+.rc-meta { font-size: 0.65rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+.rc-platforms { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
+.rc-platform-tag { padding: 2px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; }
+.rpt-rn { background: rgba(97,218,251,0.1); color: var(--rn); }
+.rpt-ios { background: rgba(250,115,67,0.1); color: var(--swift); }
+.rpt-android { background: rgba(164,198,57,0.1); color: var(--android); }
+.rpt-flutter { background: rgba(84,197,248,0.1); color: var(--flutter); }
+.rpt-web { background: rgba(129,140,248,0.1); color: var(--moltbot); }
+
+.rc-progress { margin-top: 6px; }
+.rcp-row { display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--muted); margin-bottom: 5px; font-family: 'DM Mono', monospace; }
+.rcp-bar { height: 3px; background: var(--border); border-radius: 2px; }
+.rcp-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--ollama), var(--moltbot)); }
+
+/* ============================================================
+   PAGE 4 — FIXER (issues view)
+============================================================ */
+#page-fixer .sidebar {
+  width: 260px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.fixer-sidebar-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+
+.fsh-title { font-weight: 800; font-size: 0.9rem; margin-bottom: 3px; }
+.fsh-sub { font-size: 0.68rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+.platform-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+
+.ptab {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  font-family: 'Manrope', sans-serif;
+  transition: all 0.15s;
+  display: flex; align-items: center; gap: 4px;
+}
+
+.ptab:hover { background: var(--surface2); color: var(--text); }
+.ptab.active { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+
+.issue-list-scroll { flex: 1; overflow-y: auto; padding: 8px; }
+.issue-list-scroll::-webkit-scrollbar { width: 3px; }
+.issue-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.sib-item {
+  padding: 10px 11px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex; align-items: flex-start; gap: 9px;
+  margin-bottom: 3px;
+}
+
+.sib-item:hover { background: var(--surface2); border-color: var(--border); }
+.sib-item.active { background: var(--surface2); border-color: var(--border2); }
+
+.sib-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+.dot-c { background: var(--error); box-shadow: 0 0 5px rgba(248,113,113,0.5); }
+.dot-w { background: var(--warn); }
+.dot-i { background: var(--moltbot); }
+.dot-f { background: var(--success); }
+
+.sib-t { font-size: 0.74rem; font-weight: 600; line-height: 1.3; margin-bottom: 2px; }
+.sib-f { font-size: 0.62rem; color: var(--muted); font-family: 'DM Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sib-tag { font-size: 0.58rem; font-weight: 700; padding: 1px 6px; border-radius: 3px; margin-top: 3px; display: inline-block; }
+.tag-f { background: var(--ollama-dim); color: var(--ollama); }
+.tag-p { background: var(--claude-dim); color: var(--claude); }
+.tag-done { background: rgba(74,222,128,0.1); color: var(--success); }
+
+/* Fixer main */
+#page-fixer .fixer-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fixer-toolbar {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
+}
+
+.ft-title { font-weight: 800; font-size: 0.9rem; flex: 1; }
+
+.filter-row { display: flex; gap: 5px; }
+.fbtn { padding: 4px 10px; border-radius: 5px; font-size: 0.68rem; font-weight: 700; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); font-family: 'Manrope', sans-serif; transition: all 0.15s; }
+.fbtn:hover { color: var(--text); border-color: var(--border2); }
+.fbtn.fa { background: var(--surface3); color: var(--text); border-color: var(--border2); }
+
+.fixer-body { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.fixer-body::-webkit-scrollbar { width: 4px; }
+.fixer-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Issue cards */
+.ic {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.18s;
+  overflow: hidden;
+}
+
+.ic:hover { border-color: var(--border2); transform: translateY(-1px); box-shadow: var(--shadow); }
+.ic.ica { border-color: var(--ollama-border); box-shadow: 0 0 0 1px var(--ollama-border); }
+.ic.ica.pro-ic { border-color: var(--claude-border); box-shadow: 0 0 0 1px var(--claude-border); }
+
+.ic-head { padding: 13px 16px; display: flex; align-items: flex-start; gap: 11px; }
+.ic-emoji { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-size: 17px; flex-shrink: 0; }
+.ice-crash { background: rgba(248,113,113,0.1); }
+.ice-mem { background: rgba(251,146,60,0.1); }
+.ice-anr { background: rgba(251,191,36,0.1); }
+.ice-perf { background: rgba(96,165,250,0.1); }
+.ice-sec { background: rgba(248,113,113,0.1); }
+
+.ic-info { flex: 1; }
+.ic-badges { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 6px; }
+.sev-tag { padding: 2px 7px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; }
+.st-c { background: rgba(248,113,113,0.1); color: var(--error); border: 1px solid rgba(248,113,113,0.2); }
+.st-w { background: rgba(251,191,36,0.1); color: var(--warn); border: 1px solid rgba(251,191,36,0.2); }
+.st-i { background: rgba(96,165,250,0.1); color: #60a5fa; border: 1px solid rgba(96,165,250,0.2); }
+.plat-tag { padding: 2px 7px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; }
+.pt-rn { background: rgba(97,218,251,0.1); color: var(--rn); }
+.pt-ios { background: rgba(250,115,67,0.1); color: var(--swift); }
+.pt-and { background: rgba(164,198,57,0.1); color: var(--android); }
+.pt-fl { background: rgba(84,197,248,0.1); color: var(--flutter); }
+.pt-web { background: rgba(129,140,248,0.1); color: var(--moltbot); }
+.ai-tag { padding: 2px 7px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; margin-left: auto; }
+.at-f { background: var(--ollama-dim); color: var(--ollama); border: 1px solid var(--ollama-border); }
+.at-p { background: var(--claude-dim); color: var(--claude); border: 1px solid var(--claude-border); }
+
+.ic-title { font-weight: 700; font-size: 0.87rem; margin-bottom: 4px; }
+.ic-desc { font-size: 0.74rem; color: var(--muted); line-height: 1.5; }
+.ic-file { font-family: 'DM Mono', monospace; font-size: 0.63rem; color: var(--muted); margin-top: 5px; }
+
+.ic-status-badge { font-size: 0.63rem; font-weight: 700; padding: 3px 9px; border-radius: 5px; }
+.isb-p { background: rgba(251,191,36,0.1); color: var(--warn); }
+.isb-f { background: rgba(74,222,128,0.1); color: var(--success); }
+.isb-pro { background: var(--claude-dim); color: var(--claude); }
+
+.ic-log { padding: 10px 16px; background: #08080e; font-family: 'DM Mono', monospace; font-size: 0.66rem; line-height: 1.8; border-top: 1px solid var(--border); }
+.log-row { display: flex; gap: 10px; }
+.lt { color: #333344; min-width: 58px; }
+.le { color: var(--error); font-weight: 700; }
+.lw { color: var(--warn); font-weight: 700; }
+.ltag { color: #60a5fa; }
+.lm { color: var(--muted); }
+
+/* Fix panel */
+#page-fixer .fix-panel {
+  width: 320px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.fp-hd { padding: 13px 15px; border-bottom: 1px solid var(--border); background: var(--surface2); flex-shrink: 0; }
+.fp-hd-title { font-weight: 800; font-size: 0.85rem; margin-bottom: 2px; }
+.fp-hd-sub { font-size: 0.68rem; color: var(--muted); }
+
+.fp-body { flex: 1; overflow-y: auto; }
+.fp-body::-webkit-scrollbar { width: 3px; }
+.fp-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.fp-sec { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.fp-sec-lbl { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.eng-chip { padding: 1px 7px; border-radius: 3px; font-size: 0.58rem; }
+.ech-o { background: var(--ollama-dim); color: var(--ollama); border: 1px solid var(--ollama-border); }
+.ech-c { background: var(--claude-dim); color: var(--claude); border: 1px solid var(--claude-border); }
+
+.fp-explain { font-size: 0.75rem; color: rgba(238,238,248,0.8); line-height: 1.7; }
+.fp-explain code { font-family: 'DM Mono', monospace; font-size: 0.7rem; background: var(--surface3); padding: 1px 5px; border-radius: 3px; color: var(--ollama); }
+
+.code-diff { background: #07070d; padding: 10px 12px; font-family: 'DM Mono', monospace; font-size: 0.68rem; line-height: 1.9; overflow-x: auto; }
+.dl { display: flex; gap: 8px; border-radius: 2px; padding: 0 3px; }
+.dl.r { background: rgba(248,113,113,0.07); }
+.dl.a { background: rgba(74,222,128,0.07); }
+.dn { color: #333344; min-width: 20px; font-size: 0.63rem; user-select: none; }
+.dc { flex: 1; }
+.dc.dr { color: #f87171; }
+.dc.da { color: #86efac; }
+.dc.dc2 { color: #444456; }
+
+.impact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.imp-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 9px 11px; }
+.imp-lbl { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; margin-bottom: 3px; }
+.imp-val { font-size: 0.78rem; font-weight: 700; color: var(--success); }
+.imp-val.warn { color: var(--warn); }
+
+.pr-prev { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.pr-prev-title { font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 6px; margin-bottom: 5px; flex-wrap: wrap; }
+.pr-branch { font-family: 'DM Mono', monospace; font-size: 0.63rem; color: var(--moltbot); background: var(--moltbot-dim); padding: 2px 6px; border-radius: 3px; }
+.pr-files { font-family: 'DM Mono', monospace; font-size: 0.63rem; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+
+.fp-actions { padding: 12px 14px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.btn-moltbot { width: 100%; padding: 12px; background: linear-gradient(135deg, var(--moltbot), #6366f1); color: white; border: none; border-radius: 9px; font-family: 'Manrope', sans-serif; font-size: 0.8rem; font-weight: 800; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 7px; }
+.btn-moltbot:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(129,140,248,0.3); }
+.btn-moltbot:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-row2 { display: flex; gap: 7px; }
+.btn-sec { flex: 1; padding: 9px; background: var(--surface2); color: var(--muted); border: 1px solid var(--border); border-radius: 8px; font-family: 'Manrope', sans-serif; font-size: 0.72rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.btn-sec:hover { color: var(--text); border-color: var(--border2); }
+
+.moltbot-note { text-align: center; font-size: 0.63rem; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 5px; }
+.mb-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--moltbot); animation: pulse 2s infinite; }
+
+.locked-box { padding: 28px 18px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+.locked-icon { font-size: 32px; }
+.locked-title { font-weight: 800; font-size: 0.95rem; }
+.locked-desc { font-size: 0.74rem; color: var(--muted); line-height: 1.6; }
+.btn-unlock { padding: 11px 22px; background: linear-gradient(135deg, var(--claude), #ef4444); color: white; border: none; border-radius: 9px; font-family: 'Manrope', sans-serif; font-size: 0.8rem; font-weight: 800; cursor: pointer; transition: all 0.2s; margin-top: 6px; }
+.btn-unlock:hover { filter: brightness(1.1); }
+
+/* ============================================================
+   PAGE 5 — UPGRADE
+============================================================ */
+#page-upgrade .main-area { flex: 1; overflow-y: auto; padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 32px; }
+
+.upgrade-hero { text-align: center; }
+.upgrade-hero h2 { font-size: 2rem; font-weight: 900; letter-spacing: -1px; margin-bottom: 10px; }
+.upgrade-hero p { font-size: 0.9rem; color: var(--muted); max-width: 440px; line-height: 1.7; }
+
+.plans-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 100%; max-width: 860px; }
+
+.plan-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 14px; position: relative; overflow: hidden; transition: all 0.2s; }
+.plan-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.plan-card.featured { border-color: var(--ollama-border); }
+.plan-card.featured::before { content: 'MOST POPULAR'; position: absolute; top: 14px; right: -24px; background: var(--ollama); color: #000; font-size: 0.58rem; font-weight: 800; padding: 3px 32px; transform: rotate(40deg); letter-spacing: 1px; }
+
+.plan-name { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); }
+.plan-price { display: flex; align-items: baseline; gap: 4px; }
+.plan-price .amount { font-size: 2.4rem; font-weight: 900; letter-spacing: -1px; font-family: 'DM Mono', monospace; }
+.plan-price .period { font-size: 0.8rem; color: var(--muted); }
+.plan-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+
+.plan-features { display: flex; flex-direction: column; gap: 8px; }
+.pf-item { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; }
+.pf-check { color: var(--success); font-size: 13px; flex-shrink: 0; }
+.pf-x { color: var(--muted); font-size: 13px; flex-shrink: 0; }
+
+.btn-plan { width: 100%; padding: 12px; border: 1.5px solid var(--border); border-radius: 10px; font-family: 'Manrope', sans-serif; font-size: 0.82rem; font-weight: 800; cursor: pointer; transition: all 0.2s; background: none; color: var(--muted); margin-top: auto; }
+.btn-plan:hover { border-color: var(--border2); color: var(--text); }
+.btn-plan.featured-btn { background: var(--ollama); color: #000; border-color: var(--ollama); }
+.btn-plan.featured-btn:hover { filter: brightness(1.1); }
+
+/* ============================================================
+   PAGE 6 — SETTINGS
+============================================================ */
+#page-settings .main-area { flex: 1; overflow-y: auto; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px; max-width: 700px; }
+
+.settings-section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.ss-header { padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+.ss-title { font-weight: 800; font-size: 0.9rem; }
+.ss-sub { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+.ss-row { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 14px; }
+.ss-row:last-child { border-bottom: none; }
+.ss-row-icon { font-size: 18px; width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--surface2); flex-shrink: 0; }
+.ss-row-info { flex: 1; }
+.ss-row-title { font-size: 0.82rem; font-weight: 600; margin-bottom: 2px; }
+.ss-row-desc { font-size: 0.7rem; color: var(--muted); }
+
+.toggle-switch { width: 40px; height: 22px; border-radius: 11px; border: none; cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
+.toggle-switch.on { background: var(--ollama); }
+.toggle-switch.off { background: var(--border2); }
+.toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: white; top: 3px; transition: left 0.2s; }
+.toggle-switch.on::after { left: 21px; }
+.toggle-switch.off::after { left: 3px; }
+
+.select-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; font-family: 'Manrope', sans-serif; font-size: 0.78rem; color: var(--text); outline: none; cursor: pointer; }
+
+/* ============================================================
+   SHARED UTILITIES
+============================================================ */
+@keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.fadeUp { animation: fadeUp 0.35s ease both; }
+.spin { display: inline-block; animation: spin 0.8s linear infinite; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 11px 20px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  z-index: 9999;
+  opacity: 0;
+  transition: all 0.3s;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* Stats bar at bottom of sidebar */
+.sidebar-footer { padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface2); }
+.sf-label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+.sf-pips { display: flex; gap: 3px; }
+.sf-pip { flex: 1; height: 4px; border-radius: 2px; background: var(--border); }
+.sf-pip.used { background: var(--ollama); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     PAGE: LANDING
+============================================================ -->
+<div class="page active" id="page-landing">
+  <div class="app-header">
+    <div class="logo" onclick="goto('landing')">
+      <div class="logo-mark">🔧</div>
+      RepairBot
+    </div>
+    <div class="header-nav" style="justify-content:flex-end;gap:8px;">
+      <button class="btn-ghost" style="padding:7px 18px;font-size:0.8rem;" onclick="goto('auth')">Sign In</button>
+      <button class="btn-cta" style="padding:9px 20px;font-size:0.8rem;" onclick="goto('auth')">Get Started Free →</button>
+    </div>
+  </div>
+
+  <div class="landing-hero">
+    <div class="landing-badge">
+      <div class="bdot"></div>
+      Free with Ollama · No credit card needed
+    </div>
+
+    <h1 class="landing-h1">
+      Your GitHub repo.<br>
+      <span class="grad">Bug-free in minutes.</span>
+    </h1>
+
+    <p class="landing-sub">
+      Paste any GitHub link — web app or mobile app. AI finds every bug, explains the fix, and Moltbot applies it directly to your repo. No coding knowledge required.
+    </p>
+
+    <div class="landing-actions">
+      <button class="btn-cta" onclick="goto('auth')">⚡ Start Fixing Free</button>
+      <button class="btn-ghost" onclick="gotoDemo()">▶ See Demo</button>
+    </div>
+
+    <div class="platform-strip">
+      <span style="font-size:0.72rem;color:var(--muted);font-weight:600;">Works with:</span>
+      <div class="p-chip">⚛️ React Native</div>
+      <div class="p-chip">🐦 Flutter</div>
+      <div class="p-chip">🍎 Swift / iOS</div>
+      <div class="p-chip">🤖 Kotlin / Android</div>
+      <div class="p-chip">☕ Java / Android</div>
+      <div class="p-chip">🌐 Web Apps</div>
+    </div>
+
+    <div class="how-it-works">
+      <div class="hiw-card fadeUp" style="animation-delay:0.3s">
+        <div class="hiw-num">Step 01</div>
+        <span class="hiw-icon">🔗</span>
+        <div class="hiw-title">Paste GitHub URL</div>
+        <div class="hiw-desc">Drop in any public GitHub link — mobile app, web app, or backend. No setup, no config.</div>
+      </div>
+      <div class="hiw-card fadeUp" style="animation-delay:0.4s">
+        <div class="hiw-num">Step 02</div>
+        <span class="hiw-icon">🦙</span>
+        <div class="hiw-title">AI Scans & Fixes</div>
+        <div class="hiw-desc">Ollama (free) or Claude Pro finds crashes, memory leaks, ANRs, and security issues with exact code diffs.</div>
+      </div>
+      <div class="hiw-card fadeUp" style="animation-delay:0.5s">
+        <div class="hiw-num">Step 03</div>
+        <span class="hiw-icon">⬡</span>
+        <div class="hiw-title">Moltbot Applies It</div>
+        <div class="hiw-desc">One click — Moltbot pushes the fix directly to your GitHub repo and opens a pull request. Done.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE: AUTH
+============================================================ -->
+<div class="page" id="page-auth" style="flex-direction:row;">
+  <div class="auth-left">
+    <div class="auth-logo">
+      <div class="logo-mark">🔧</div>
+      RepairBot
+    </div>
+    <div class="auth-hero-text">
+      <h2 class="auth-headline">Fix bugs.<br><span class="g">Ship faster.</span></h2>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:22px;line-height:1.6;">Join 2,400+ developers already using RepairBot to automatically fix their repos.</p>
+      <div class="auth-features">
+        <div class="af-item">
+          <div class="af-icon g">🦙</div>
+          <div class="af-text"><strong>Free forever with Ollama</strong><span>Simple fixes — no credit card, no limits on free tier</span></div>
+        </div>
+        <div class="af-item">
+          <div class="af-icon o">✦</div>
+          <div class="af-text"><strong>Claude Pro for complex bugs</strong><span>ANRs, race conditions, security audits — $9/mo</span></div>
+        </div>
+        <div class="af-item">
+          <div class="af-icon p">⬡</div>
+          <div class="af-text"><strong>Moltbot applies all fixes</strong><span>Opens a PR directly on your GitHub repo</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:0.68rem;color:var(--muted);">🔒 Your code is never stored. Fixes applied via Moltbot only.</div>
+  </div>
+
+  <div class="auth-right">
+    <div class="auth-card">
+      <div id="authTitleArea">
+        <div class="auth-title" id="authTitle">Welcome back 👋</div>
+        <div class="auth-sub" id="authSub">Sign in to start fixing repos.</div>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabLogin" onclick="authTab('login')">Sign In</button>
+        <button class="auth-tab" id="tabSignup" onclick="authTab('signup')">Create Account</button>
+      </div>
+
+      <div class="social-btns">
+        <button class="s-btn" onclick="socialLogin('github')">
+          <span class="s-ico">⬡</span>
+          <span class="s-lbl">Continue with GitHub</span>
+          <span class="s-rec">Recommended</span>
+        </button>
+        <button class="s-btn" onclick="socialLogin('google')">
+          <span class="s-ico">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          </span>
+          <span class="s-lbl">Continue with Google</span>
+        </button>
+      </div>
+
+      <div class="divider">
+        <div class="divider-line"></div>
+        <div class="divider-text" id="dividerText">or sign in with email</div>
+        <div class="divider-line"></div>
+      </div>
+
+      <div id="nameGroup" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input class="form-input" id="nameInput" type="text" placeholder="Jane Smith">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="emailInput" type="email" placeholder="you@example.com">
+        <div class="form-err" id="emailErr">Enter a valid email address.</div>
+      </div>
+
+      <div class="form-group">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <label class="form-label" style="margin:0">Password</label>
+          <span id="forgotLink" style="font-size:0.7rem;color:var(--muted);cursor:pointer;font-weight:600;" onclick="showForgot()">Forgot?</span>
+        </div>
+        <div class="pass-wrap">
+          <input class="form-input" id="passInput" type="password" placeholder="••••••••">
+          <button class="toggle-pass" onclick="togglePass()">👁️</button>
+        </div>
+        <div class="form-err" id="passErr">Password must be at least 8 characters.</div>
+      </div>
+
+      <div id="confirmGroup" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Confirm Password</label>
+          <div class="pass-wrap">
+            <input class="form-input" id="confirmInput" type="password" placeholder="••••••••">
+          </div>
+          <div class="form-err" id="confirmErr">Passwords don't match.</div>
+        </div>
+      </div>
+
+      <button class="btn-submit" id="submitBtn" onclick="handleAuth()">
+        <span id="submitLabel">Sign In</span>
+      </button>
+
+      <div class="switch-msg">
+        <span id="switchText">Don't have an account?</span>
+        <button id="switchBtn" onclick="authTab('signup')">Create one free →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE: DASHBOARD
+============================================================ -->
+<div class="page" id="page-dashboard">
+  <div class="app-header">
+    <div class="logo" onclick="goto('landing')">
+      <div class="logo-mark">🔧</div> RepairBot
+    </div>
+    <div class="header-nav">
+      <button class="hnav-btn active" onclick="goto('dashboard')">🏠 Dashboard</button>
+      <button class="hnav-btn" onclick="goto('fixer')">🔧 Fix Issues</button>
+      <button class="hnav-btn" onclick="goto('upgrade')">✦ Upgrade</button>
+      <button class="hnav-btn" onclick="goto('settings')">⚙️ Settings</button>
+    </div>
+    <div class="header-right">
+      <div class="free-pill">🦙 2/3 Free Scans</div>
+      <div class="upgrade-pill" onclick="goto('upgrade')">✦ Upgrade $9/mo</div>
+      <div class="avatar" onclick="toggleAvatarMenu()">👤
+        <div class="avatar-menu" id="avatarMenu">
+          <div class="amenu-item" onclick="goto('settings')">⚙️ Settings</div>
+          <div class="amenu-item" onclick="goto('upgrade')">✦ Upgrade to Pro</div>
+          <div class="amenu-item danger" onclick="goto('landing')">🚪 Sign Out</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <div class="main-area" id="dashMain">
+      <div class="dash-welcome fadeUp">
+        <div>
+          <h2>Good morning, Jane 👋</h2>
+          <p>You have 3 active repos · 2 issues pending · 1 needs Claude Pro</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div class="free-pill">🦙 1 free scan left</div>
+        </div>
+      </div>
+
+      <!-- Repo input -->
+      <div class="repo-input-hero fadeUp" style="animation-delay:0.05s">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted)">Scan a New Repo</div>
+        <div class="repo-row">
+          <input class="repo-url-input" id="dashRepoInput" placeholder="https://github.com/username/repo" value="">
+          <button class="btn-scan" onclick="dashScan()">⚡ Scan</button>
+        </div>
+        <div class="engine-choice">
+          <div class="ec-opt selected-ollama" id="ecOllama" onclick="selectEngine('ollama')">
+            <span style="font-size:18px">🦙</span>
+            <div><div class="ec-opt-name">Ollama</div><div class="ec-opt-desc">Fast, free, great for common bugs</div></div>
+            <span class="ec-opt-tag ec-free">FREE</span>
+          </div>
+          <div class="ec-opt" id="ecClaude" onclick="selectEngine('claude')">
+            <span style="font-size:18px">✦</span>
+            <div><div class="ec-opt-name">Claude Pro</div><div class="ec-opt-desc">Complex bugs, security, large repos</div></div>
+            <span class="ec-opt-tag ec-pro">$9/mo</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row fadeUp" style="animation-delay:0.1s">
+        <div class="stat-card">
+          <div class="stat-icon si-red">💥</div>
+          <div class="stat-info"><div class="stat-num" style="color:var(--error)">5</div><div class="stat-lbl">Crashes Found</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon si-green">✅</div>
+          <div class="stat-info"><div class="stat-num" style="color:var(--success)">8</div><div class="stat-lbl">Fixes Applied</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon si-purple">⬡</div>
+          <div class="stat-info"><div class="stat-num" style="color:var(--moltbot)">8</div><div class="stat-lbl">PRs Opened</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon si-orange">🧠</div>
+          <div class="stat-info"><div class="stat-num" style="color:var(--claude)">3</div><div class="stat-lbl">Mem Leaks Fixed</div></div>
+        </div>
+      </div>
+
+      <!-- Recent repos -->
+      <div class="fadeUp" style="animation-delay:0.15s">
+        <div class="section-header" style="margin-bottom:12px;">
+          <div class="section-title">Your Repos</div>
+          <div class="section-link" onclick="goto('fixer')">View all issues →</div>
+        </div>
+        <div class="repos-grid">
+          <div class="repo-card" onclick="goto('fixer')">
+            <div class="rc-top">
+              <div class="rc-icon" style="background:rgba(97,218,251,0.1)">📱</div>
+              <div>
+                <div class="rc-name">acme / ShopApp</div>
+                <div class="rc-meta">React Native · 248 files</div>
+              </div>
+            </div>
+            <div class="rc-platforms">
+              <span class="rc-platform-tag rpt-rn">⚛️ RN</span>
+              <span class="rc-platform-tag rpt-ios">🍎 iOS</span>
+              <span class="rc-platform-tag rpt-android">🤖 Android</span>
+            </div>
+            <div class="rc-progress">
+              <div class="rcp-row"><span>🦙 Ollama · 3 issues</span><span style="color:var(--error)">2 critical</span></div>
+              <div class="rcp-bar"><div class="rcp-fill" style="width:65%"></div></div>
+            </div>
+          </div>
+          <div class="repo-card" onclick="goto('fixer')">
+            <div class="rc-top">
+              <div class="rc-icon" style="background:rgba(250,115,67,0.1)">🍎</div>
+              <div>
+                <div class="rc-name">acme / iOSApp</div>
+                <div class="rc-meta">Swift · 92 files</div>
+              </div>
+            </div>
+            <div class="rc-platforms">
+              <span class="rc-platform-tag rpt-ios">🍎 Swift</span>
+            </div>
+            <div class="rc-progress">
+              <div class="rcp-row"><span>🦙 Ollama · 1 issue</span><span style="color:var(--success)">All fixed</span></div>
+              <div class="rcp-bar"><div class="rcp-fill" style="width:100%"></div></div>
+            </div>
+          </div>
+          <div class="repo-card" onclick="goto('fixer')">
+            <div class="rc-top">
+              <div class="rc-icon" style="background:rgba(164,198,57,0.1)">🤖</div>
+              <div>
+                <div class="rc-name">acme / AndroidApp</div>
+                <div class="rc-meta">Kotlin · 134 files</div>
+              </div>
+            </div>
+            <div class="rc-platforms">
+              <span class="rc-platform-tag rpt-android">🤖 Kotlin</span>
+            </div>
+            <div class="rc-progress">
+              <div class="rcp-row"><span>✦ Claude · 1 complex</span><span style="color:var(--claude)">Pro needed</span></div>
+              <div class="rcp-bar"><div class="rcp-fill" style="width:40%;background:var(--claude)"></div></div>
+            </div>
+          </div>
+          <div class="repo-card" onclick="goto('fixer')">
+            <div class="rc-top">
+              <div class="rc-icon" style="background:rgba(84,197,248,0.1)">🐦</div>
+              <div>
+                <div class="rc-name">acme / FlutterApp</div>
+                <div class="rc-meta">Flutter · 78 files</div>
+              </div>
+            </div>
+            <div class="rc-platforms">
+              <span class="rc-platform-tag rpt-flutter">🐦 Flutter</span>
+            </div>
+            <div class="rc-progress">
+              <div class="rcp-row"><span>🦙 Ollama · 2 issues</span><span style="color:var(--warn)">1 pending</span></div>
+              <div class="rcp-bar"><div class="rcp-fill" style="width:50%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE: FIXER
+============================================================ -->
+<div class="page" id="page-fixer">
+  <div class="app-header">
+    <div class="logo" onclick="goto('landing')"><div class="logo-mark">🔧</div> RepairBot</div>
+    <div class="header-nav">
+      <button class="hnav-btn" onclick="goto('dashboard')">🏠 Dashboard</button>
+      <button class="hnav-btn active" onclick="goto('fixer')">🔧 Fix Issues</button>
+      <button class="hnav-btn" onclick="goto('upgrade')">✦ Upgrade</button>
+      <button class="hnav-btn" onclick="goto('settings')">⚙️ Settings</button>
+    </div>
+    <div class="header-right">
+      <div class="free-pill">🦙 2/3 Free Scans</div>
+      <div class="upgrade-pill" onclick="goto('upgrade')">✦ Upgrade $9/mo</div>
+      <div class="avatar" onclick="toggleAvatarMenu()">👤
+        <div class="avatar-menu" id="avatarMenu2">
+          <div class="amenu-item" onclick="goto('settings')">⚙️ Settings</div>
+          <div class="amenu-item" onclick="goto('upgrade')">✦ Upgrade to Pro</div>
+          <div class="amenu-item danger" onclick="goto('landing')">🚪 Sign Out</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <div class="sidebar" id="fixerSidebar">
+      <div class="fixer-sidebar-header">
+        <div class="fsh-title">acme / ShopApp</div>
+        <div class="fsh-sub">React Native · 248 files · 18,400 lines</div>
+      </div>
+
+      <div class="platform-tabs">
+        <button class="ptab active" onclick="switchPlatform('rn',this)">⚛️ RN</button>
+        <button class="ptab" onclick="switchPlatform('flutter',this)">🐦 FL</button>
+        <button class="ptab" onclick="switchPlatform('swift',this)">🍎 iOS</button>
+        <button class="ptab" onclick="switchPlatform('kotlin',this)">🤖 KT</button>
+        <button class="ptab" onclick="switchPlatform('android',this)">☕ Java</button>
+      </div>
+
+      <div class="issue-list-scroll" id="sidebarIssues"></div>
+
+      <div class="sidebar-footer">
+        <div class="sf-label">Free scans this month</div>
+        <div class="sf-pips">
+          <div class="sf-pip used"></div>
+          <div class="sf-pip used"></div>
+          <div class="sf-pip"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main fixer -->
+    <div class="fixer-main">
+      <div class="fixer-toolbar">
+        <div class="ft-title" id="fixerTitle">React Native — Issues</div>
+        <div class="filter-row">
+          <button class="fbtn fa" onclick="filterFixer('all',this)">All</button>
+          <button class="fbtn" onclick="filterFixer('critical',this)">🔴 Critical</button>
+          <button class="fbtn" onclick="filterFixer('warning',this)">🟡 Warning</button>
+          <button class="fbtn" onclick="filterFixer('fixed',this)">✅ Fixed</button>
+        </div>
+      </div>
+      <div class="fixer-body" id="fixerBody"></div>
+    </div>
+
+    <!-- Fix panel -->
+    <div class="fix-panel" id="fixPanel">
+      <div class="fp-hd">
+        <div class="fp-hd-title" id="fpHdTitle">Select an issue</div>
+        <div class="fp-hd-sub" id="fpHdSub">Click any issue to see the AI fix</div>
+      </div>
+      <div class="fp-body" id="fpBody">
+        <div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--muted);font-size:0.8rem;flex-direction:column;gap:8px;padding:20px;text-align:center;">
+          <div style="font-size:28px">👈</div>
+          Click an issue to see the fix
+        </div>
+      </div>
+      <div id="fpActions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE: UPGRADE
+============================================================ -->
+<div class="page" id="page-upgrade">
+  <div class="app-header">
+    <div class="logo" onclick="goto('landing')"><div class="logo-mark">🔧</div> RepairBot</div>
+    <div class="header-nav">
+      <button class="hnav-btn" onclick="goto('dashboard')">🏠 Dashboard</button>
+      <button class="hnav-btn" onclick="goto('fixer')">🔧 Fix Issues</button>
+      <button class="hnav-btn active" onclick="goto('upgrade')">✦ Upgrade</button>
+      <button class="hnav-btn" onclick="goto('settings')">⚙️ Settings</button>
+    </div>
+    <div class="header-right">
+      <div class="avatar" onclick="toggleAvatarMenu()">👤
+        <div class="avatar-menu" id="avatarMenu3">
+          <div class="amenu-item" onclick="goto('settings')">⚙️ Settings</div>
+          <div class="amenu-item danger" onclick="goto('landing')">🚪 Sign Out</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <div class="main-area">
+      <div class="upgrade-hero fadeUp">
+        <h2>Unlock Claude Pro 🚀</h2>
+        <p>Get Claude's deep reasoning for complex bugs, security audits, ANRs, race conditions, and large codebase analysis. Moltbot applies every fix automatically.</p>
+      </div>
+
+      <div class="plans-grid fadeUp" style="animation-delay:0.1s">
+        <div class="plan-card">
+          <div class="plan-name">Free</div>
+          <div class="plan-price"><span class="amount">$0</span><span class="period">/month</span></div>
+          <div class="plan-desc">Perfect for getting started. Ollama handles simple bugs — no credit card ever.</div>
+          <div class="plan-features">
+            <div class="pf-item"><span class="pf-check">✓</span> 3 Ollama scans/month</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Simple bug fixes</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Moltbot PR creation</div>
+            <div class="pf-item"><span class="pf-check">✓</span> 1 repo connected</div>
+            <div class="pf-item"><span class="pf-x" style="color:var(--muted)">✗</span> <span style="color:var(--muted)">Claude Pro fixes</span></div>
+            <div class="pf-item"><span class="pf-x" style="color:var(--muted)">✗</span> <span style="color:var(--muted)">ANR & race condition fixes</span></div>
+          </div>
+          <button class="btn-plan" disabled style="opacity:0.5;cursor:default;">Current Plan</button>
+        </div>
+
+        <div class="plan-card featured">
+          <div class="plan-name">Pro</div>
+          <div class="plan-price"><span class="amount">$9</span><span class="period">/month</span></div>
+          <div class="plan-desc">Claude Sonnet for complex bugs, security issues, and deep codebase analysis.</div>
+          <div class="plan-features">
+            <div class="pf-item"><span class="pf-check">✓</span> Unlimited Ollama scans</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Claude Sonnet fixes</div>
+            <div class="pf-item"><span class="pf-check">✓</span> ANR & race condition fixes</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Security audit</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Up to 5 repos</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Moltbot PR creation</div>
+          </div>
+          <button class="btn-plan featured-btn" onclick="upgradePlan('pro')">Start 3-day Free Trial →</button>
+        </div>
+
+        <div class="plan-card">
+          <div class="plan-name">Team</div>
+          <div class="plan-price"><span class="amount">$29</span><span class="period">/month</span></div>
+          <div class="plan-desc">Claude Opus + full team access for agencies and growing dev teams.</div>
+          <div class="plan-features">
+            <div class="pf-item"><span class="pf-check">✓</span> Everything in Pro</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Claude Opus (max power)</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Unlimited repos</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Full fix history & logs</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Team members (5 seats)</div>
+            <div class="pf-item"><span class="pf-check">✓</span> Priority support</div>
+          </div>
+          <button class="btn-plan" onclick="upgradePlan('team')">Upgrade to Team →</button>
+        </div>
+      </div>
+
+      <div style="text-align:center;font-size:0.75rem;color:var(--muted);margin-top:-16px;">
+        Cancel anytime · No hidden fees · Moltbot included in all plans
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PAGE: SETTINGS
+============================================================ -->
+<div class="page" id="page-settings">
+  <div class="app-header">
+    <div class="logo" onclick="goto('landing')"><div class="logo-mark">🔧</div> RepairBot</div>
+    <div class="header-nav">
+      <button class="hnav-btn" onclick="goto('dashboard')">🏠 Dashboard</button>
+      <button class="hnav-btn" onclick="goto('fixer')">🔧 Fix Issues</button>
+      <button class="hnav-btn" onclick="goto('upgrade')">✦ Upgrade</button>
+      <button class="hnav-btn active" onclick="goto('settings')">⚙️ Settings</button>
+    </div>
+    <div class="header-right">
+      <div class="avatar" onclick="toggleAvatarMenu()">👤
+        <div class="avatar-menu" id="avatarMenu4">
+          <div class="amenu-item danger" onclick="goto('landing')">🚪 Sign Out</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <div class="main-area">
+
+      <div style="font-size:1.2rem;font-weight:900;letter-spacing:-0.5px;margin-bottom:-4px;">Settings</div>
+
+      <div class="settings-section fadeUp">
+        <div class="ss-header"><div class="ss-title">AI Engine</div><div class="ss-sub">Choose your default analysis engine</div></div>
+        <div class="ss-row">
+          <div class="ss-row-icon">🦙</div>
+          <div class="ss-row-info"><div class="ss-row-title">Default Engine</div><div class="ss-row-desc">Which AI runs first when scanning a repo</div></div>
+          <select class="select-input">
+            <option>🦙 Ollama (Free)</option>
+            <option>✦ Claude Sonnet (Pro)</option>
+            <option>✦ Claude Opus (Team)</option>
+          </select>
+        </div>
+        <div class="ss-row">
+          <div class="ss-row-icon">🔀</div>
+          <div class="ss-row-info"><div class="ss-row-title">Smart Engine Routing</div><div class="ss-row-desc">Use Ollama for simple fixes, auto-suggest Claude for complex ones</div></div>
+          <button class="toggle-switch on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></button>
+        </div>
+      </div>
+
+      <div class="settings-section fadeUp" style="animation-delay:0.05s">
+        <div class="ss-header"><div class="ss-title">Moltbot & GitHub</div><div class="ss-sub">Control how Moltbot applies fixes</div></div>
+        <div class="ss-row">
+          <div class="ss-row-icon">⬡</div>
+          <div class="ss-row-info"><div class="ss-row-title">GitHub Account</div><div class="ss-row-desc">jane@example.com · Connected</div></div>
+          <button class="btn-sec" style="width:auto;padding:7px 14px;font-size:0.72rem;">Reconnect</button>
+        </div>
+        <div class="ss-row">
+          <div class="ss-row-icon">🌿</div>
+          <div class="ss-row-info"><div class="ss-row-title">Auto-create Branch</div><div class="ss-row-desc">Moltbot creates a new branch for each fix (e.g. fix/crash-auth-ts)</div></div>
+          <button class="toggle-switch on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></button>
+        </div>
+        <div class="ss-row">
+          <div class="ss-row-icon">🔀</div>
+          <div class="ss-row-info"><div class="ss-row-title">Auto-open Pull Request</div><div class="ss-row-desc">Automatically open a PR after applying each fix</div></div>
+          <button class="toggle-switch on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></button>
+        </div>
+        <div class="ss-row">
+          <div class="ss-row-icon">✍️</div>
+          <div class="ss-row-info"><div class="ss-row-title">Require Confirmation</div><div class="ss-row-desc">Ask before applying — don't auto-apply without approval</div></div>
+          <button class="toggle-switch off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></button>
+        </div>
+      </div>
+
+      <div class="settings-section fadeUp" style="animation-delay:0.1s">
+        <div class="ss-header"><div class="ss-title">Notifications</div><div class="ss-sub">When should RepairBot alert you?</div></div>
+        <div class="ss-row">
+          <div class="ss-row-icon">📧</div>
+          <div class="ss-row-info"><div class="ss-row-title">Email on Critical Issues</div><div class="ss-row-desc">Get emailed when a critical bug is found</div></div>
+          <button class="toggle-switch on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></button>
+        </div>
+        <div class="ss-row">
+          <div class="ss-row-icon">✅</div>
+          <div class="ss-row-info"><div class="ss-row-title">Email on Fix Applied</div><div class="ss-row-desc">Notify when Moltbot opens a PR</div></div>
+          <button class="toggle-switch off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></button>
+        </div>
+      </div>
+
+      <div class="settings-section fadeUp" style="animation-delay:0.15s">
+        <div class="ss-header"><div class="ss-title">Account</div><div class="ss-sub">jane@example.com · Free Plan</div></div>
+        <div class="ss-row">
+          <div class="ss-row-icon">✦</div>
+          <div class="ss-row-info"><div class="ss-row-title">Upgrade to Pro</div><div class="ss-row-desc">Unlock Claude Pro fixes for $9/month</div></div>
+          <button class="btn-sec" style="width:auto;padding:7px 14px;font-size:0.72rem;background:var(--claude-dim);color:var(--claude);border-color:var(--claude-border);" onclick="goto('upgrade')">Upgrade →</button>
+        </div>
+        <div class="ss-row">
+          <div class="ss-row-icon">🚪</div>
+          <div class="ss-row-info"><div class="ss-row-title">Sign Out</div><div class="ss-row-desc">Sign out of RepairBot</div></div>
+          <button class="btn-sec" style="width:auto;padding:7px 14px;font-size:0.72rem;color:var(--error);border-color:rgba(248,113,113,0.3);" onclick="goto('landing')">Sign Out</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="globalToast"></div>
+
+<script>
+// ============================================================
+// NAVIGATION
+// ============================================================
+let currentPage = 'landing';
+
+function goto(page) {
+  document.querySelectorAll('.page').forEach(p => {
+    p.classList.remove('active');
+    p.style.opacity = '0';
+    p.style.transform = 'translateY(12px)';
+  });
+
+  const target = document.getElementById('page-' + page);
+  if (!target) return;
+
+  // Show page
+  target.style.display = 'flex';
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      target.classList.add('active');
+      target.style.opacity = '1';
+      target.style.transform = 'translateY(0)';
+    });
+  });
+
+  currentPage = page;
+
+  // Close menus
+  document.querySelectorAll('.avatar-menu').forEach(m => m.classList.remove('open'));
+
+  // Init page
+  if (page === 'fixer') initFixer();
+}
+
+function gotoDemo() {
+  goto('auth');
+  setTimeout(() => {
+    goto('dashboard');
+    toast('👋 Welcome to the demo! Try scanning a repo.');
+  }, 500);
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+let authMode = 'login';
+let passVisible = false;
+
+function authTab(mode) {
+  authMode = mode;
+  document.getElementById('tabLogin').classList.toggle('active', mode === 'login');
+  document.getElementById('tabSignup').classList.toggle('active', mode === 'signup');
+  document.getElementById('nameGroup').style.display = mode === 'signup' ? 'block' : 'none';
+  document.getElementById('confirmGroup').style.display = mode === 'signup' ? 'block' : 'none';
+  document.getElementById('forgotLink').style.display = mode === 'login' ? 'block' : 'none';
+  document.getElementById('authTitle').textContent = mode === 'login' ? 'Welcome back 👋' : 'Create your account ✨';
+  document.getElementById('authSub').textContent = mode === 'login' ? 'Sign in to start fixing repos.' : 'Free forever with Ollama. No credit card.';
+  document.getElementById('submitLabel').textContent = mode === 'login' ? 'Sign In' : 'Create Free Account';
+  document.getElementById('dividerText').textContent = mode === 'login' ? 'or sign in with email' : 'or sign up with email';
+  document.getElementById('switchText').textContent = mode === 'login' ? "Don't have an account?" : 'Already have one?';
+  document.getElementById('switchBtn').textContent = mode === 'login' ? 'Create one free →' : 'Sign in →';
+  document.getElementById('switchBtn').onclick = () => authTab(mode === 'login' ? 'signup' : 'login');
+}
+
+function socialLogin(provider) {
+  const btn = event.currentTarget;
+  const lbl = btn.querySelector('.s-lbl');
+  const orig = lbl.textContent;
+  lbl.textContent = provider === 'github' ? '⏳ Connecting to GitHub...' : '⏳ Connecting to Google...';
+  btn.disabled = true;
+  setTimeout(() => { goto('dashboard'); toast('✅ Signed in successfully!'); }, 1500);
+}
+
+function togglePass() {
+  passVisible = !passVisible;
+  document.getElementById('passInput').type = passVisible ? 'text' : 'password';
+  event.currentTarget.textContent = passVisible ? '🙈' : '👁️';
+}
+
+function handleAuth() {
+  const email = document.getElementById('emailInput').value;
+  const pass = document.getElementById('passInput').value;
+  let valid = true;
+
+  document.getElementById('emailErr').classList.toggle('show', !email.includes('@'));
+  document.getElementById('passErr').classList.toggle('show', pass.length < 8);
+  if (!email.includes('@') || pass.length < 8) return;
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  document.getElementById('submitLabel').innerHTML = '<span class="spin">↻</span> ' + (authMode === 'login' ? 'Signing in...' : 'Creating account...');
+  setTimeout(() => { goto('dashboard'); toast('✅ ' + (authMode === 'login' ? 'Signed in!' : 'Account created! Welcome 🎉')); }, 1600);
+}
+
+function showForgot() {
+  toast('📧 Reset link sent to your email!');
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+let selectedEngine = 'ollama';
+
+function selectEngine(e) {
+  selectedEngine = e;
+  document.getElementById('ecOllama').className = 'ec-opt' + (e === 'ollama' ? ' selected-ollama' : '');
+  document.getElementById('ecClaude').className = 'ec-opt' + (e === 'claude' ? ' selected-claude' : '');
+  if (e === 'claude') { goto('upgrade'); }
+}
+
+function dashScan() {
+  const val = document.getElementById('dashRepoInput').value.trim();
+  if (!val) { toast('⚠️ Please paste a GitHub URL first'); return; }
+  toast('🔍 Scanning ' + val + ' with ' + (selectedEngine === 'ollama' ? '🦙 Ollama' : '✦ Claude') + '...');
+  setTimeout(() => { goto('fixer'); toast('✅ Scan complete — issues found!'); }, 1500);
+}
+
+// ============================================================
+// FIXER DATA
+// ============================================================
+const allIssues = {
+  rn: [
+    { id:'rn1', sev:'critical', emoji:'💥', ec:'ice-crash', plat:'rn', platLabel:'React Native', platClass:'pt-rn', engine:'free', title:'App crashes on Android 14 — FlatList null ref', desc:'FlatList throws NullPointerException on Android 14 when list data updates during unmount.', file:'src/components/ProductList.tsx · L34', status:'pending', log:[ {t:'12:04:21',l:'E',tag:'ReactNativeJS',m:'TypeError: Cannot read property \'length\' of null'}, {t:'12:04:21',l:'E',tag:'AndroidRuntime',m:'FATAL EXCEPTION: main — com.acme.shopapp'} ], explanation:'The FlatList on line 34 accesses <code>data.length</code> without a null check. When the component unmounts mid-update on Android 14, the data prop is temporarily null.', diff:[ {t:'ctx',n:32,c:'const ProductList = ({ data, onPress }) => {'}, {t:'r',n:33,c:'  const count = data.length;'}, {t:'a',n:33,c:'  const count = data?.length ?? 0;'}, {t:'r',n:34,c:'  return <FlatList data={data} .../>;'}, {t:'a',n:34,c:'  return <FlatList data={data ?? []} .../>;'} ], impact:{a:'Crash eliminated',b:'~18% of Android 14 users'}, branch:'fix/flatlist-null-android14', files:['ProductList.tsx'] },
+    { id:'rn2', sev:'critical', emoji:'🧠', ec:'ice-mem', plat:'rn', platLabel:'React Native', platClass:'pt-rn', engine:'free', title:'Memory leak — AppState listener not removed', desc:'AppState event listener added in useEffect is never removed, causing memory accumulation.', file:'src/hooks/useAppState.ts · L18', status:'fixed', log:[ {t:'12:10:44',l:'W',tag:'Memory',m:'Large memory allocation: 120MB'}, {t:'12:10:45',l:'W',tag:'Memory',m:'useAppState subscription not cleaned up'} ], explanation:'The <code>AppState.addEventListener</code> on line 18 adds a listener every render but never removes it. The cleanup function is missing the <code>remove()</code> call.', diff:[ {t:'ctx',n:16,c:'useEffect(() => {'}, {t:'ctx',n:17,c:'  const sub = AppState.addEventListener(\'change\', handler);'}, {t:'r',n:18,c:'}, []);'}, {t:'a',n:18,c:'  return () => sub.remove();'}, {t:'a',n:19,c:'}, []);'} ], impact:{a:'-85MB memory',b:'All users'}, branch:'fix/appstate-listener-leak', files:['useAppState.ts'] },
+    { id:'rn3', sev:'critical', emoji:'⏳', ec:'ice-anr', plat:'rn', platLabel:'React Native', platClass:'pt-rn', engine:'pro', title:'ANR — Heavy computation blocks main thread', desc:'Product search runs complex sort+filter synchronously on JS thread, blocking UI for 3-8s.', file:'src/screens/SearchScreen.tsx · L67', status:'pro', log:[ {t:'12:15:02',l:'E',tag:'ANRManager',m:'ANR in com.acme.shopapp'}, {t:'12:15:02',l:'E',tag:'ANRManager',m:'Reason: Input dispatching timed out (3247ms)'} ], explanation:'Claude Pro required. Moving computation off the main thread requires <code>InteractionManager</code> and Worker threads across 3 files.', diff:[ {t:'ctx',n:65,c:'// Claude Pro required to unlock this fix'} ], impact:{a:'ANR eliminated',b:'All search users'}, branch:'fix/search-anr-worker', files:['SearchScreen.tsx','searchWorker.ts'] },
+    { id:'rn4', sev:'warning', emoji:'⚡', ec:'ice-perf', plat:'rn', platLabel:'React Native', platClass:'pt-rn', engine:'free', title:'Missing key props causes slow list re-renders', desc:'List items lack unique keys, forcing React Native to re-render all 94 items on every update.', file:'src/screens/CartScreen.tsx · L91', status:'fixed', log:[ {t:'12:20:11',l:'W',tag:'ReactNativeJS',m:'Warning: Each child should have a unique "key" prop.'} ], explanation:'CartScreen maps items without <code>key</code> props. React falls back to index-based reconciliation, forcing a full re-render of all 94 cart items.', diff:[ {t:'r',n:91,c:'  {items.map((item) => <CartItem item={item} />)}'}, {t:'a',n:91,c:'  {items.map((item) => <CartItem key={item.id} item={item} />)}'} ], impact:{a:'3x faster renders',b:'Cart users'}, branch:'fix/cart-key-props', files:['CartScreen.tsx'] },
+  ],
+  flutter: [
+    { id:'fl1', sev:'critical', emoji:'💥', ec:'ice-crash', plat:'flutter', platLabel:'Flutter', platClass:'pt-fl', engine:'free', title:'LateInitializationError on cold start', desc:'Late-initialized variable accessed before init in HomeController causes crash on cold start.', file:'lib/controllers/home_controller.dart · L22', status:'pending', log:[ {t:'09:31:05',l:'E',tag:'Flutter',m:'LateInitializationError: Field \'products\' has not been initialized.'}, {t:'09:31:05',l:'E',tag:'Flutter',m:'  #0 HomeController.products (home_controller.dart:22)'} ], explanation:'The <code>late List products</code> is declared but only assigned in an async function. If the widget builds before the future resolves, the field is uninitialized.', diff:[ {t:'r',n:22,c:'  late List<Product> products;'}, {t:'a',n:22,c:'  List<Product>? products;'}, {t:'r',n:46,c:'  if (products.isEmpty) return EmptyState();'}, {t:'a',n:46,c:'  if (products == null) return LoadingState();'} ], impact:{a:'Cold start crash fixed',b:'100% of users'}, branch:'fix/late-init-home', files:['home_controller.dart','home_screen.dart'] },
+  ],
+  swift: [
+    { id:'sw1', sev:'critical', emoji:'🧠', ec:'ice-mem', plat:'ios', platLabel:'iOS / Swift', platClass:'pt-ios', engine:'free', title:'Retain cycle — strong self in URLSession closure', desc:'Strong reference to self inside closure creates retain cycle, preventing ViewController dealloc.', file:'ShopApp/Network/APIClient.swift · L88', status:'pending', log:[ {t:'10:14:22',l:'W',tag:'Leaks',m:'Memory leak detected in ProductViewController'}, {t:'10:14:22',l:'W',tag:'ARC',m:'Retain cycle: VC → closure → VC'} ], explanation:'The URLSession closure on line 88 captures <code>self</code> strongly. Since the closure is held by <code>self.task</code>, a retain cycle forms. Use <code>[weak self]</code> to break it.', diff:[ {t:'r',n:88,c:'  task = URLSession.shared.dataTask(with: url) { data, _, _ in'}, {t:'a',n:88,c:'  task = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in'}, {t:'r',n:89,c:'    self.handleResponse(data)'}, {t:'a',n:89,c:'    self?.handleResponse(data)'} ], impact:{a:'Retain cycle fixed',b:'All iOS users'}, branch:'fix/retain-cycle-api', files:['APIClient.swift'] },
+  ],
+  kotlin: [
+    { id:'kt1', sev:'critical', emoji:'💥', ec:'ice-crash', plat:'android', platLabel:'Kotlin', platClass:'pt-and', engine:'free', title:'NPE — null Bundle access on backstack restore', desc:'Fragment arguments Bundle accessed without null check in onViewCreated, causes NPE on backstack.', file:'app/ui/ProductFragment.kt · L55', status:'pending', log:[ {t:'11:22:01',l:'E',tag:'AndroidRuntime',m:'java.lang.NullPointerException: arguments bundle is null'}, {t:'11:22:01',l:'E',tag:'AndroidRuntime',m:'  at ProductFragment.onViewCreated(ProductFragment.kt:55)'} ], explanation:'The <code>arguments?.getString()</code> call returns a nullable but is force-unwrapped with <code>!!</code>. Use safe navigation with a default fallback instead.', diff:[ {t:'r',n:55,c:'  val id: String = arguments?.getString("productId")!!'}, {t:'a',n:55,c:'  val id = arguments?.getString("productId") ?: run {'}, {t:'a',n:56,c:'    findNavController().navigateUp(); return'}, {t:'a',n:57,c:'  }'} ], impact:{a:'Crash eliminated',b:'Backstack users'}, branch:'fix/fragment-bundle-null', files:['ProductFragment.kt'] },
+  ],
+  android: [
+    { id:'jv1', sev:'critical', emoji:'⏳', ec:'ice-anr', plat:'android', platLabel:'Java / Android', platClass:'pt-and', engine:'free', title:'Network call on main thread — ANR', desc:'HTTP request made synchronously on UI thread inside onCreate, causing ANR on slow networks.', file:'app/src/main/java/MainActivity.java · L43', status:'pending', log:[ {t:'13:05:18',l:'E',tag:'StrictMode',m:'android.os.NetworkOnMainThreadException'}, {t:'13:05:18',l:'E',tag:'ANR',m:'Input dispatching timed out (5812ms)'} ], explanation:'Line 43 makes a synchronous HTTP call on the main thread inside <code>onCreate</code>. Moving it to an <code>ExecutorService</code> with a handler callback fixes the ANR.', diff:[ {t:'r',n:43,c:'  String data = httpClient.get(API_URL); // main thread!'}, {t:'a',n:43,c:'  ExecutorService exec = Executors.newSingleThreadExecutor();'}, {t:'a',n:44,c:'  exec.execute(() -> {'}, {t:'a',n:45,c:'    String data = httpClient.get(API_URL);'}, {t:'a',n:46,c:'    runOnUiThread(() -> updateUI(data));'}, {t:'a',n:47,c:'  });'} ], impact:{a:'ANR eliminated',b:'All users on slow networks'}, branch:'fix/network-main-thread', files:['MainActivity.java'] },
+  ],
+};
+
+// ============================================================
+// FIXER LOGIC
+// ============================================================
+let currentPlatform = 'rn';
+let selectedIssue = null;
+
+function initFixer() {
+  renderSidebar(currentPlatform);
+  renderIssues(currentPlatform);
+  const list = allIssues[currentPlatform];
+  if (list && list.length > 0) selectIssue(list[0]);
+}
+
+function switchPlatform(p, btn) {
+  currentPlatform = p;
+  selectedIssue = null;
+  document.querySelectorAll('.ptab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  const titles = {rn:'React Native',flutter:'Flutter',swift:'Swift / iOS',kotlin:'Kotlin / Android',android:'Java / Android'};
+  document.getElementById('fixerTitle').textContent = titles[p] + ' — Issues';
+  renderSidebar(p);
+  renderIssues(p);
+  const list = allIssues[p];
+  if (list && list.length > 0) selectIssue(list[0]);
+}
+
+function renderSidebar(p) {
+  const list = allIssues[p] || [];
+  document.getElementById('sidebarIssues').innerHTML = list.map(issue => `
+    <div class="sib-item ${selectedIssue?.id === issue.id ? 'active' : ''}" onclick="selectIssue(getIssue('${issue.id}'))" id="sib-${issue.id}">
+      <div class="sib-dot ${issue.status==='fixed'?'dot-f':issue.sev==='critical'?'dot-c':issue.sev==='warning'?'dot-w':'dot-i'}"></div>
+      <div style="flex:1;min-width:0">
+        <div class="sib-t">${issue.title}</div>
+        <div class="sib-f">${issue.file.split('·')[0]}</div>
+        <span class="sib-tag ${issue.status==='fixed'?'tag-done':issue.engine==='pro'?'tag-p':'tag-f'}">${issue.status==='fixed'?'✓ Fixed':issue.engine==='pro'?'✦ Pro':'🦙 Free'}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderIssues(p, filter='all') {
+  let list = allIssues[p] || [];
+  if (filter === 'critical') list = list.filter(i => i.sev === 'critical' && i.status !== 'fixed');
+  else if (filter === 'warning') list = list.filter(i => i.sev === 'warning');
+  else if (filter === 'fixed') list = list.filter(i => i.status === 'fixed');
+
+  document.getElementById('fixerBody').innerHTML = list.map((issue, idx) => `
+    <div class="ic ${issue.engine==='pro'?'pro-ic':''} ${selectedIssue?.id===issue.id?'ica':''}" onclick="selectIssue(getIssue('${issue.id}'))" id="card-${issue.id}" style="animation:fadeUp 0.25s ease ${idx*0.04}s both;">
+      <div class="ic-head">
+        <div class="ic-emoji ${issue.ec}">${issue.emoji}</div>
+        <div class="ic-info">
+          <div class="ic-badges">
+            <span class="sev-tag ${issue.sev==='critical'?'st-c':issue.sev==='warning'?'st-w':'st-i'}">${issue.sev}</span>
+            <span class="plat-tag ${issue.platClass}">${issue.platLabel}</span>
+            <span class="ai-tag ${issue.engine==='pro'?'at-p':'at-f'}">${issue.engine==='pro'?'✦ Claude Pro':'🦙 Ollama Free'}</span>
+          </div>
+          <div class="ic-title">${issue.title}</div>
+          <div class="ic-desc">${issue.desc}</div>
+          <div class="ic-file">📄 ${issue.file}</div>
+        </div>
+        <div>
+          <span class="ic-status-badge ${issue.status==='fixed'?'isb-f':issue.status==='pro'?'isb-pro':'isb-p'}">
+            ${issue.status==='fixed'?'✅ Fixed':issue.status==='pro'?'🔒 Pro Only':'⏳ Pending'}
+          </span>
+        </div>
+      </div>
+      ${issue.log ? `
+      <div class="ic-log">
+        ${issue.log.map(l=>`<div class="log-row"><span class="lt">${l.t}</span><span class="${l.l==='E'?'le':'lw'}">${l.l}</span><span class="ltag">${l.tag}</span><span class="lm">${l.m}</span></div>`).join('')}
+      </div>` : ''}
+    </div>
+  `).join('') || `<div style="text-align:center;padding:40px;color:var(--muted);font-size:0.8rem;">No issues match this filter.</div>`;
+}
+
+function filterFixer(type, btn) {
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('fa'));
+  btn.classList.add('fa');
+  renderIssues(currentPlatform, type);
+}
+
+function getIssue(id) {
+  for (const p of Object.values(allIssues)) {
+    const found = p.find(i => i.id === id);
+    if (found) return found;
+  }
+}
+
+function selectIssue(issue) {
+  if (!issue) return;
+  selectedIssue = issue;
+
+  document.querySelectorAll('.sib-item').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.ic').forEach(e => e.classList.remove('ica'));
+  const s = document.getElementById('sib-' + issue.id);
+  const c = document.getElementById('card-' + issue.id);
+  if (s) s.classList.add('active');
+  if (c) c.classList.add('active');
+
+  renderFixPanel(issue);
+}
+
+function renderFixPanel(issue) {
+  document.getElementById('fpHdTitle').textContent = issue.title;
+  document.getElementById('fpHdSub').textContent = issue.engine === 'pro' ? '✦ Claude Pro required' : '🦙 Ollama · Free fix';
+
+  const isPro = issue.engine === 'pro';
+  const isFixed = issue.status === 'fixed';
+
+  const diff = issue.diff.map(d => `
+    <div class="dl ${d.t==='r'?'r':d.t==='a'?'a':''}">
+      <span class="dn">${d.n}</span>
+      <span class="dc ${d.t==='r'?'dr':d.t==='a'?'da':'dc2'}">${d.t==='r'?'- ':d.t==='a'?'+ ':'  '}${esc(d.c)}</span>
+    </div>`).join('');
+
+  document.getElementById('fpBody').innerHTML = isPro ? `
+    <div class="locked-box">
+      <div class="locked-icon">🔒</div>
+      <div class="locked-title">Claude Pro Required</div>
+      <div class="locked-desc">This fix requires deep reasoning across ${issue.files?.length || 1} files. Upgrade to Claude Pro to unlock.</div>
+      <button class="btn-unlock" onclick="goto('upgrade')">Upgrade to Pro — $9/mo</button>
+      <div style="font-size:0.68rem;color:var(--muted);margin-top:-4px;">3-day free trial · Cancel anytime</div>
+    </div>
+  ` : `
+    <div class="fp-sec">
+      <div class="fp-sec-lbl">AI Analysis <span class="eng-chip ech-o">🦙 Ollama</span></div>
+      <div class="fp-explain">${issue.explanation}</div>
+    </div>
+    <div>
+      <div class="fp-sec-lbl" style="padding:10px 14px 6px;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);">Code Diff</div>
+      <div class="code-diff">${diff}</div>
+    </div>
+    <div class="fp-sec">
+      <div class="fp-sec-lbl">Impact</div>
+      <div class="impact-grid">
+        <div class="imp-item"><div class="imp-lbl">Result</div><div class="imp-val">${issue.impact.a}</div></div>
+        <div class="imp-item"><div class="imp-lbl">Affects</div><div class="imp-val warn">${issue.impact.b}</div></div>
+      </div>
+    </div>
+    <div class="fp-sec">
+      <div class="fp-sec-lbl">Moltbot PR Preview</div>
+      <div class="pr-prev">
+        <div class="pr-prev-title">⬡ fix: ${issue.title.split('—')[0].trim().toLowerCase()} <span class="pr-branch">${issue.branch}</span></div>
+        <div class="pr-files">${(issue.files||[]).map(f=>`<span>📄 ${f}</span>`).join('')}</div>
+      </div>
+    </div>
+  `;
+
+  // Actions
+  const actEl = document.getElementById('fpActions');
+  actEl.innerHTML = '';
+
+  if (!isPro) {
+    actEl.innerHTML = `
+      <div class="fp-actions">
+        <button class="btn-moltbot" id="applyBtn" onclick="applyFix()">
+          <span>⬡</span> ${isFixed ? 'View PR on GitHub' : 'Apply Fix via Moltbot'}
+        </button>
+        <div class="btn-row2">
+          <button class="btn-sec">📋 Copy diff</button>
+          <button class="btn-sec">⏭ Skip</button>
+        </div>
+        <div class="moltbot-note"><div class="mb-dot"></div>Moltbot will open a PR on your repo</div>
+      </div>`;
+  }
+}
+
+function applyFix() {
+  const btn = document.getElementById('applyBtn');
+  if (!btn) return;
+  if (selectedIssue?.status === 'fixed') { toast('🔗 Opening PR on GitHub...'); return; }
+  btn.innerHTML = '<span class="spin">↻</span> Moltbot applying...';
+  btn.disabled = true;
+  btn.style.background = 'var(--surface3)';
+  setTimeout(() => {
+    if (selectedIssue) selectedIssue.status = 'fixed';
+    const pr = Math.floor(Math.random()*50)+10;
+    btn.innerHTML = `✅ PR #${pr} opened!`;
+    btn.style.background = 'linear-gradient(135deg, var(--success), #16a34a)';
+    toast(`⬡ Moltbot opened PR #${pr} — fix applied!`);
+    renderSidebar(currentPlatform);
+    setTimeout(() => { btn.innerHTML = '<span>⬡</span> View PR on GitHub'; btn.disabled = false; }, 3500);
+  }, 2000);
+}
+
+function esc(str) { return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ============================================================
+// UPGRADE
+// ============================================================
+function upgradePlan(plan) {
+  toast('🎉 ' + (plan === 'pro' ? 'Claude Pro' : 'Team') + ' trial started! Welcome to the dark side of bug-free code 🚀');
+  setTimeout(() => goto('dashboard'), 1500);
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function toggleAvatarMenu() {
+  const menus = document.querySelectorAll('.avatar-menu');
+  menus.forEach(m => {
+    if (m.closest('.page#page-' + currentPage)) {
+      m.classList.toggle('open');
+    }
+  });
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.avatar')) {
+    document.querySelectorAll('.avatar-menu').forEach(m => m.classList.remove('open'));
+  }
+});
+
+function toast(msg) {
+  const t = document.getElementById('globalToast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && currentPage === 'auth') handleAuth();
+});
+
+// Make landing page visible immediately
+goto('landing');
+</script>
+</body>
+</html>
